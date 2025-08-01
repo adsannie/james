@@ -8,9 +8,6 @@ from dotenv import load_dotenv
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-import os
-import sys
-
 DATA_PATH = "/data"
 
 if not os.path.exists(DATA_PATH):
