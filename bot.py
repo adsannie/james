@@ -138,7 +138,7 @@ async def on_message(message):
                 if isinstance(thread, discord.Thread):
                     await message.reply(
                         "👋 Você já tem um tópico privado!\n"
-                        "Vamos continuar a conversa por lá:\n"
+                        "Vamos continuar a conversa por lá? É só clicar no link abaixo:\n"
                         f"<#{thread.id}>"
                     )
                     await thread.send(f"{message.author.mention} está de volta ao tópico!")
@@ -157,7 +157,7 @@ async def on_message(message):
         await thread.add_user(message.author)
         await message.reply(
             "✅ Criei um tópico privado para você!\n"
-            "Vamos conversar por lá:\n"
+            "Vamos conversar por lá... É só clicar no link abaixo:\n"
             f"<#{thread.id}>"
         )
         await thread.send("Pode mandar sua pergunta por aqui 😊")
