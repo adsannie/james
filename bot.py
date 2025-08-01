@@ -27,8 +27,9 @@ load_dotenv()
 
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+OPENAI_ASSISTANT_ID = os.getenv("OPENAI_ASSISTANT_ID")
 CANAL_AUTORIZADO_ID = int(os.getenv("CANAL_AUTORIZADO_ID", "0"))
-HISTORICO_FILE = "/data/conversas.json"
+THREADS_FILE = "/data/assistant_threads.json"
 TOPICOS_FILE = "/data/topicos.json"
 
 openai.api_key = OPENAI_API_KEY
@@ -58,17 +59,15 @@ def save_json(path, data):
 def dividir_mensagem(texto, limite=2000):
     return [texto[i:i+limite] for i in range(0, len(texto), limite)]
 
-historico = load_json(HISTORICO_FILE)
+assistant_threads = load_json(THREADS_FILE)
 topicos = load_json(TOPICOS_FILE)
 
 @client.event
 async def on_ready():
-    print("✅ Bot iniciado com Responses API.", file=sys.stderr, flush=True)
+    print("✅ Bot iniciado com Assistants API.", file=sys.stderr, flush=True)
 
 @client.event
 async def on_message(message):
-    # print(f"[DEBUG] Mensagem recebida: {message.author}: {message.content}", file=sys.stderr, flush=True)
-
     if message.author.bot:
         return
 
@@ -80,28 +79,50 @@ async def on_message(message):
     if isinstance(message.channel, discord.Thread):
         try:
             print("[DEBUG] Entrou na thread do usuário.", file=sys.stderr, flush=True)
-            if user_id not in historico:
-                historico[user_id] = []
-            print("[DEBUG] Adicionando mensagem ao histórico.", file=sys.stderr, flush=True)
-            historico[user_id].append({"role": "user", "content": message.content})
+
+            # Mapeamento: ID do tópico Discord <-> Thread da OpenAI
+            discord_thread_id = str(message.channel.id)
+
+            if discord_thread_id not in assistant_threads:
+                # Cria thread OpenAI para o usuário (um para cada tópico Discord)
+                openai_thread = openai.beta.threads.create()
+                assistant_threads[discord_thread_id] = openai_thread.id
+                save_json(THREADS_FILE, assistant_threads)
+                await message.channel.send("🧠 Pronto! Podemos continuar nossa conversa por aqui. Fique à vontade para perguntar.")
+
+            openai_thread_id = assistant_threads[discord_thread_id]
             await message.channel.send("⏳ Processando sua pergunta...")
 
-            print("[DEBUG] Chamando OpenAI...", file=sys.stderr, flush=True)
-            response = openai.chat.completions.create(
-                model="gpt-4o",
-                messages=historico[user_id],
-                temperature=0.7
+            # Adiciona mensagem do usuário
+            openai.beta.threads.messages.create(
+                thread_id=openai_thread_id,
+                role="user",
+                content=message.content
             )
-            print("[DEBUG] OpenAI respondeu.", file=sys.stderr, flush=True)
-            resposta = response.choices[0].message.content
-            historico[user_id].append({"role": "assistant", "content": resposta})
 
-            print("[DEBUG] Enviando resposta ao usuário.", file=sys.stderr, flush=True)
+            # Executa o assistant
+            run = openai.beta.threads.runs.create(
+                thread_id=openai_thread_id,
+                assistant_id=OPENAI_ASSISTANT_ID
+            )
+
+            # Aguarda até completar
+            while True:
+                run_status = openai.beta.threads.runs.retrieve(
+                    thread_id=openai_thread_id,
+                    run_id=run.id
+                )
+                if run_status.status == "completed":
+                    break
+
+            messages = openai.beta.threads.messages.list(thread_id=openai_thread_id)
+            resposta = messages.data[0].content[0].text.value
+
+            # Envia resposta (em blocos de até 2000 caracteres)
             for parte in dividir_mensagem(resposta):
                 await message.channel.send(parte)
 
-            save_json(HISTORICO_FILE, historico)
-            print("[DEBUG] Histórico salvo.", file=sys.stderr, flush=True)
+            save_json(THREADS_FILE, assistant_threads)
 
         except Exception as e:
             print(f"[ERRO]: {type(e).__name__} - {e}", file=sys.stderr, flush=True)
@@ -112,7 +133,6 @@ async def on_message(message):
     # Checar se já existe um tópico para esse usuário
     try:
         if user_id in topicos:
-            # Verifica se o tópico ainda existe (pode ter sido apagado manualmente)
             try:
                 thread = await client.fetch_channel(topicos[user_id])
                 if isinstance(thread, discord.Thread):
