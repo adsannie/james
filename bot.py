@@ -8,6 +8,8 @@ from dotenv import load_dotenv
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
+os.makedirs("/data", exist_ok=True)  # Garante que o diretório /data exista
+
 load_dotenv()
 
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
@@ -36,7 +38,7 @@ def load_json(path):
         return {}
 
 def save_json(path, data):
-    os.makedirs(os.path.dirname(path), exist_ok=True)
+    # Diretório já é garantido no início do script
     with open(path, "w") as f:
         json.dump(data, f)
     print(f"[DEBUG] {path} salvo.", file=sys.stderr, flush=True)
