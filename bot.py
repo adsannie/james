@@ -8,13 +8,12 @@ from dotenv import load_dotenv
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
+# Verificação do disco /data
 DATA_PATH = "/data"
-
 if not os.path.exists(DATA_PATH):
     print(f"[ERRO] O diretório {DATA_PATH} NÃO existe!", file=sys.stderr, flush=True)
 else:
     print(f"[OK] O diretório {DATA_PATH} existe.", file=sys.stderr, flush=True)
-    # Testa se é possível gravar um arquivo temporário
     try:
         testfile = os.path.join(DATA_PATH, "test.tmp")
         with open(testfile, "w") as f:
@@ -23,7 +22,6 @@ else:
         print(f"[OK] O diretório {DATA_PATH} é gravável.", file=sys.stderr, flush=True)
     except Exception as e:
         print(f"[ERRO] Não é possível gravar em {DATA_PATH}: {e}", file=sys.stderr, flush=True)
-
 
 load_dotenv()
 
@@ -99,7 +97,6 @@ async def on_message(message):
             historico[user_id].append({"role": "assistant", "content": resposta})
 
             print("[DEBUG] Enviando resposta ao usuário.", file=sys.stderr, flush=True)
-            # Enviar resposta dividida em partes <= 2000 caracteres
             for parte in dividir_mensagem(resposta):
                 await message.channel.send(parte)
 
