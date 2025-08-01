@@ -99,6 +99,7 @@ async def on_message(message):
             historico[user_id].append({"role": "assistant", "content": resposta})
 
             print("[DEBUG] Enviando resposta ao usuário.", file=sys.stderr, flush=True)
+            # Enviar resposta dividida em partes <= 2000 caracteres
             for parte in dividir_mensagem(resposta):
                 await message.channel.send(parte)
 
