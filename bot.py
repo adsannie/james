@@ -104,7 +104,7 @@ async def on_message(message):
             )
 
             # Aguarda até completar com timeout de segurança
-            timeout = datetime.now() + timedelta(seconds=30)
+            timeout = datetime.now() + timedelta(seconds=90)
             while True:
                 run_status = openai.beta.threads.runs.retrieve(
                     thread_id=openai_thread_id,
