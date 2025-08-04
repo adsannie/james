@@ -4,8 +4,9 @@ import discord
 import openai
 import json
 import traceback
+import asyncio
 from dotenv import load_dotenv
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 # Verificação do disco /data
@@ -80,11 +81,9 @@ async def on_message(message):
         try:
             print("[DEBUG] Entrou na thread do usuário.", file=sys.stderr, flush=True)
 
-            # Mapeamento: ID do tópico Discord <-> Thread da OpenAI
             discord_thread_id = str(message.channel.id)
 
             if discord_thread_id not in assistant_threads:
-                # Cria thread OpenAI para o usuário (um para cada tópico Discord)
                 openai_thread = openai.beta.threads.create()
                 assistant_threads[discord_thread_id] = openai_thread.id
                 save_json(THREADS_FILE, assistant_threads)
@@ -93,20 +92,19 @@ async def on_message(message):
             openai_thread_id = assistant_threads[discord_thread_id]
             await message.channel.send("⏳ Processando sua pergunta...")
 
-            # Adiciona mensagem do usuário
             openai.beta.threads.messages.create(
                 thread_id=openai_thread_id,
                 role="user",
                 content=message.content
             )
 
-            # Executa o assistant
             run = openai.beta.threads.runs.create(
                 thread_id=openai_thread_id,
                 assistant_id=OPENAI_ASSISTANT_ID
             )
 
-            # Aguarda até completar
+            # Aguarda até completar com timeout de segurança
+            timeout = datetime.now() + timedelta(seconds=30)
             while True:
                 run_status = openai.beta.threads.runs.retrieve(
                     thread_id=openai_thread_id,
@@ -114,11 +112,14 @@ async def on_message(message):
                 )
                 if run_status.status == "completed":
                     break
+                if datetime.now() > timeout:
+                    await message.channel.send("⚠️ A resposta demorou demais. Tente novamente mais tarde.")
+                    return
+                await asyncio.sleep(1)
 
             messages = openai.beta.threads.messages.list(thread_id=openai_thread_id)
             resposta = messages.data[0].content[0].text.value
 
-            # Envia resposta (em blocos de até 2000 caracteres)
             for parte in dividir_mensagem(resposta):
                 await message.channel.send(parte)
 
@@ -130,7 +131,6 @@ async def on_message(message):
             await message.channel.send("⚠️ O servidor está ocupado no momento. Tente novamente em instantes.")
         return
 
-    # Checar se já existe um tópico para esse usuário
     try:
         if user_id in topicos:
             try:
@@ -145,7 +145,6 @@ async def on_message(message):
                     return
             except Exception as e:
                 print(f"[ERRO ao buscar thread]: {type(e).__name__} - {e}", file=sys.stderr, flush=True)
-                # Se não encontrar o tópico, segue para criar um novo
 
         agora = datetime.now(ZoneInfo("America/Sao_Paulo")).strftime("%d/%m %H:%M")
         nome_topico = f"Usuário: {message.author.display_name} • {agora}"
