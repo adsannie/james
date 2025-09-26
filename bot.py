@@ -4,10 +4,10 @@ import discord
 import openai
 import json
 import traceback
-import asyncio
 from dotenv import load_dotenv
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
+import asyncio
 
 # Verificação do disco /data
 DATA_PATH = "/data"
@@ -72,12 +72,17 @@ async def on_message(message):
     if message.author.bot:
         return
 
-    if message.channel.id != CANAL_AUTORIZADO_ID and not isinstance(message.channel, discord.Thread):
+    # ✅ Permite somente:
+    # - Mensagens no canal autorizado; OU
+    # - Mensagens em threads cujo canal-pai é o canal autorizado
+    is_thread = isinstance(message.channel, discord.Thread)
+    parent_ok = is_thread and getattr(message.channel, "parent", None) and message.channel.parent.id == CANAL_AUTORIZADO_ID
+    if not (message.channel.id == CANAL_AUTORIZADO_ID or parent_ok):
         return
 
     user_id = str(message.author.id)
 
-    if isinstance(message.channel, discord.Thread):
+    if is_thread:
         try:
             print("[DEBUG] Entrou na thread do usuário.", file=sys.stderr, flush=True)
 
@@ -103,8 +108,8 @@ async def on_message(message):
                 assistant_id=OPENAI_ASSISTANT_ID
             )
 
-            # Aguarda até completar com timeout de segurança
-            timeout = datetime.now() + timedelta(seconds=90)
+            # Timeout de 60s para evitar loop
+            timeout = datetime.now() + timedelta(seconds=60)
             while True:
                 run_status = openai.beta.threads.runs.retrieve(
                     thread_id=openai_thread_id,
@@ -131,11 +136,13 @@ async def on_message(message):
             await message.channel.send("⚠️ O servidor está ocupado no momento. Tente novamente em instantes.")
         return
 
+    # Checar se já existe um tópico para esse usuário no canal autorizado
     try:
         if user_id in topicos:
             try:
                 thread = await client.fetch_channel(topicos[user_id])
-                if isinstance(thread, discord.Thread):
+                # garante que a thread resgatada é do canal autorizado
+                if isinstance(thread, discord.Thread) and thread.parent and thread.parent.id == CANAL_AUTORIZADO_ID:
                     await message.reply(
                         "👋 Você já tem um tópico privado!\n"
                         "Vamos continuar a conversa por lá? É só clicar no link abaixo:\n"
